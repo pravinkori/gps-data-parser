@@ -1,5 +1,6 @@
 import pytz
 import logging
+import datetime
 import mysql.connector
 
 def is_valid_latitude(lat):
@@ -72,3 +73,73 @@ def handle_serial_exception(e):
 def handle_database_exception(e):
     """Handle database-related exceptions."""
     logging.error(f"Databse operation error: {e}")
+
+# Parse the GNGGA sentence for GPS data
+def parse_gngga_sentence(sentence):
+    try:
+        parts = sentence.split(',')
+
+        # Check if the sentence is a valid GNGGA message
+        if parts[0] != "$GNGGA":
+            return None
+        
+        # Parse the GPS fix quality; ignore invalid or non-standard fixes
+        fix_quality = int(parts[6])
+        if fix_quality in [0, 6, 7, 8]:
+            logging.warning("Invalid or non-standard GPS fix.")
+            return None
+
+        # Extract and parse UTC time from the sentence
+        utc_time = parts[1]
+        hours = int(utc_time[0:2])
+        minutes = int(utc_time[2:4])
+        seconds = float(utc_time[4:])
+        gps_time = datetime.time(hours, minutes, int(seconds), int((seconds - int(seconds)) * 1e6))
+
+        # Convert latitude from degrees and minutes to decimal degrees
+        raw_latitude = parts[2]
+        lat_degrees = int(raw_latitude[:2])
+        lat_minutes = float(raw_latitude[2:])
+        latitude = lat_degrees + lat_minutes / 60
+        if parts[3] == 'S':
+            latitude = -latitude
+
+        # Convert longitude from degrees and minutes to decimal degrees
+        raw_longitude = parts[4]
+        lon_degrees = int(raw_longitude[:3])
+        lon_minutes = float(raw_longitude[3:])
+        longitude = lon_degrees + lon_minutes / 60
+        if parts[5] == 'W':
+            longitude = -longitude
+
+        # Parse the number of satellites and timestamp
+        num_satellites = int(parts[7])
+        gps_date = datetime.datetime.utcnow().date()
+        gps_datetime_utc = datetime.datetime.combine(gps_date, gps_time)
+        gps_datetime_utc = pytz.utc.localize(gps_datetime_utc)
+
+        # Convert the UTC time to Dubai timezone
+        ist_timezone = pytz.timezone('Asia/Kolkata')
+        gps_datetime_ist = gps_datetime_utc.astimezone(ist_timezone)
+
+        # Extract date and time in Dubai timezone
+        gps_date_ist = gps_datetime_ist.date()
+        gps_time_ist = gps_datetime_ist.time()
+
+        # Determine if the fix is high-accuracy (RTK fix)
+        high_accuracy = fix_quality in [4, 5]
+
+        # Prepare the parsed GPS data
+        return {
+            "latitude": latitude,
+            "longitude": longitude,
+            "date": gps_date_ist.isoformat(),
+            "time": gps_time_ist.isoformat(),
+            "num_satellites": num_satellites,
+            "high_accuracy": high_accuracy,
+            "fix_quality": fix_quality
+        }
+
+    except (IndexError, ValueError) as e:
+        logging.error(f"Error parsing GNGGA sentence: {e}")
+        return None
