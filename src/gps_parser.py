@@ -7,32 +7,56 @@ import configparser
 import mysql.connector
 import serial.tools.list_ports
 
+from utils.helpers import (
+    knots_to_kmh,
+    setup_logging, 
+    parse_gnvtg_sentence, 
+    parse_gngga_sentence, 
+    decimal_degrees_to_dms,
+    handle_serial_exception, 
+    handle_database_exception,
+    create_database_connection,
+    )
+
 class GPSParser:
-    def __init__(self, config_file='config.ini'):
-        # Setup logging for debugging and operational tracking
-        logging.basicConfig(level=logging.INFO, 
-                            format='%(asctime)s - %(levelname)s - %(message)s',
-                            filename='gps_parser.log', filemode='a')
+    # def __init__(self, config_file='config.ini'):
+    #     # Setup logging for debugging and operational tracking
+    #     logging.basicConfig(level=logging.INFO, 
+    #                         format='%(asctime)s - %(levelname)s - %(message)s',
+    #                         filename='gps_parser.log', filemode='a')
 
-        # Initialize the config parser and read the configuration file
-        self.config = configparser.ConfigParser()
-        self.config.read(config_file)
+    #     # Initialize the config parser and read the configuration file
+    #     self.config = configparser.ConfigParser()
+    #     self.config.read(config_file)
 
-        try:
-            # Fetch database configuration from the INI file, using fallbacks for robustness
-            self.db_host = self.config.get('database', 'host', fallback='localhost')
-            self.db_user = self.config.get('database', 'user', fallback='root')
-            self.db_password = self.config.get('database', 'password', fallback='')
-            self.db_name = self.config.get('database', 'name', fallback='gps_data')
+    #     try:
+    #         # Fetch database configuration from the INI file, using fallbacks for robustness
+    #         self.db_host = self.config.get('database', 'host', fallback='localhost')
+    #         self.db_user = self.config.get('database', 'user', fallback='root')
+    #         self.db_password = self.config.get('database', 'password', fallback='')
+    #         self.db_name = self.config.get('database', 'name', fallback='gps_data')
 
-            # Fetch serial port configuration, with default values if not specified
-            self.baudrate = self.config.getint('serial', 'baudrate', fallback=9600)
-            self.timeout = self.config.getint('serial', 'timeout', fallback=1)
-        except configparser.Error as e:
-            logging.error(f"Configuration error: {e}")
-            raise
+    #         # Fetch serial port configuration, with default values if not specified
+    #         self.baudrate = self.config.getint('serial', 'baudrate', fallback=9600)
+    #         self.timeout = self.config.getint('serial', 'timeout', fallback=1)
+    #     except configparser.Error as e:
+    #         logging.error(f"Configuration error: {e}")
+    #         raise
 
-        # Initialize database and serial connections as None for later setup
+    #     # Initialize database and serial connections as None for later setup
+    #     self.db_connection = None
+    #     self.cursor = None
+    #     self.serial_port = None
+
+    def __init__(self, config):
+        # Setup logging
+        setup_logging('gps_parser.log')
+
+        # Read configurations
+        self.db_config = config['database']
+        self.serial_config = config['serial']
+
+        # Initialize database and serial connections as None
         self.db_connection = None
         self.cursor = None
         self.serial_port = None
