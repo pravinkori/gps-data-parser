@@ -143,3 +143,27 @@ def parse_gngga_sentence(sentence):
     except (IndexError, ValueError) as e:
         logging.error(f"Error parsing GNGGA sentence: {e}")
         return None
+
+# Parse the GNVTG sentence for GPS data
+def parse_gnvtg_sentence(sentence):
+    # Parse the GNVTG sentence for velocity and direction data
+    try:
+        parts = sentence.split(',')
+
+        # Check if the sentence is a valid GNVTF message
+        if parts[0] != "$GNVTG":
+            return None
+
+        # Extract bearing and speed in km/h
+        bearing = float(parts[1]) if parts[1] else None
+        speed_kmh = float(parts[7]) if parts[7] else None
+
+        # Prepare the parsed velocity and bearing data
+        return {
+            "bearing": bearing,
+            "speed_kmh": speed_kmh
+        }
+
+    except (IndexError, ValueError) as e:
+        logging.error(f"Error parsing GNVTG sentence: {e}")
+        return None
