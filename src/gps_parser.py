@@ -10,6 +10,9 @@ import serial.tools.list_ports
 from utils.helpers import (
     knots_to_kmh,
     setup_logging, 
+    execute_query,
+    is_valid_latitude,
+    is_valid_longitude,
     parse_gnvtg_sentence, 
     parse_gngga_sentence, 
     decimal_degrees_to_dms,
@@ -183,19 +186,26 @@ class GPSParser:
             return None
 
     def insert_into_database(self, latitude, longitude, gps_date, gps_time, speed, bearing, interval_type):
-        # Insert GPS data into the database
-        try:
-            self.cursor.execute(
-                """
+        # Validate latitude and longitude values
+        if not (is_valid_latitude(latitude) and is_valid_longitude(longitude)):
+            logging.error(f"Invalid coordinates: lat={latitude}, lon={longitude}")
+            return
+        
+        # SQL query to insert data into table
+        query = """
                 INSERT INTO tbl_gps_data (latd, lond, gps_date, gps_time, speed, bearing, interval_type) 
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """,
-                (latitude, longitude, gps_date, gps_time, speed, bearing, interval_type)
-            )
+            """
+        
+        params = (latitude, longitude, gps_date, gps_time, speed, bearing, interval_type)
+        
+        # Insert GPS data into the database
+        try:
+            execute_query(self.cursor, query, params)
             self.db_connection.commit()
             logging.info("Data inserted into database successfully.")
         except mysql.connector.Error as db_err:
-            logging.error(f"Database insertion error: {db_err}")
+            handle_database_exception(db_err)
 
     def gps_data_handler(self):
         # Handle incoming GPS data from the serial port
