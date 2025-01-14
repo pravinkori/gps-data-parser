@@ -19,44 +19,29 @@ from utils.helpers import (
     )
 
 class GPSParser:
-    # def __init__(self, config_file='config.ini'):
-    #     # Setup logging for debugging and operational tracking
-    #     logging.basicConfig(level=logging.INFO, 
-    #                         format='%(asctime)s - %(levelname)s - %(message)s',
-    #                         filename='gps_parser.log', filemode='a')
-
-    #     # Initialize the config parser and read the configuration file
-    #     self.config = configparser.ConfigParser()
-    #     self.config.read(config_file)
-
-    #     try:
-    #         # Fetch database configuration from the INI file, using fallbacks for robustness
-    #         self.db_host = self.config.get('database', 'host', fallback='localhost')
-    #         self.db_user = self.config.get('database', 'user', fallback='root')
-    #         self.db_password = self.config.get('database', 'password', fallback='')
-    #         self.db_name = self.config.get('database', 'name', fallback='gps_data')
-
-    #         # Fetch serial port configuration, with default values if not specified
-    #         self.baudrate = self.config.getint('serial', 'baudrate', fallback=9600)
-    #         self.timeout = self.config.getint('serial', 'timeout', fallback=1)
-    #     except configparser.Error as e:
-    #         logging.error(f"Configuration error: {e}")
-    #         raise
-
-    #     # Initialize database and serial connections as None for later setup
-    #     self.db_connection = None
-    #     self.cursor = None
-    #     self.serial_port = None
-
-    def __init__(self, config):
-        # Setup logging
+    def __init__(self, config_file='config.ini'):
+        # Setup logging for debugging and operational tracking
         setup_logging('gps_parser.log')
 
-        # Read configurations
-        self.db_config = config['database']
-        self.serial_config = config['serial']
+        # Initialize the config parser and read the configuration file
+        self.config = configparser.ConfigParser()
+        self.config.read(config_file)
 
-        # Initialize database and serial connections as None
+        try:
+            # Fetch database configuration from the INI file, using fallbacks for robustness
+            self.db_host = self.config.get('database', 'host', fallback='localhost')
+            self.db_user = self.config.get('database', 'user', fallback='root')
+            self.db_password = self.config.get('database', 'password', fallback='')
+            self.db_name = self.config.get('database', 'name', fallback='gps_data')
+
+            # Fetch serial port configuration, with default values if not specified
+            self.baudrate = self.config.getint('serial', 'baudrate', fallback=9600)
+            self.timeout = self.config.getint('serial', 'timeout', fallback=1)
+        except configparser.Error as e:
+            logging.error(f"Configuration error: {e}")
+            raise
+
+        # Initialize database and serial connections as None for later setup
         self.db_connection = None
         self.cursor = None
         self.serial_port = None
@@ -83,18 +68,18 @@ class GPSParser:
 
     def connect_to_database(self):
         # Establish a connection to the MySQL database
-        try:
-            self.db_connection = mysql.connector.connect(
-                host=self.db_host,
-                user=self.db_user,
-                password=self.db_password,
-                database=self.db_name
-            )
+        self.db_connection = create_database_connection(
+             host=self.db_host,
+             user=self.db_user,
+             password=self.db_password,
+             database=self.db_name
+        )
+        if self.db_connection:
             self.cursor = self.db_connection.cursor()
             logging.info("Connected to database successfully.")
-        except mysql.connector.Error as err:
-            logging.error(f"Database connection error: {err}")
-            raise
+        else:
+            logging.error("Failed to connect to the database.")
+            raise ConnectionError("Database connection failed.")
 
     def parse_gngga(self, sentence):
         # Parse the GNGGA sentence for GPS data
