@@ -67,19 +67,23 @@ class GPSParser:
             raise
 
     def connect_to_database(self):
-        # Establish a connection to the MySQL database
-        self.db_connection = create_database_connection(
-             host=self.db_host,
-             user=self.db_user,
-             password=self.db_password,
-             database=self.db_name
-        )
-        if self.db_connection:
-            self.cursor = self.db_connection.cursor()
-            logging.info("Connected to database successfully.")
-        else:
-            logging.error("Failed to connect to the database.")
-            raise ConnectionError("Database connection failed.")
+        try:
+            # Establish a connection to the MySQL database
+            self.db_connection = create_database_connection(
+                host=self.db_host,
+                user=self.db_user,
+                password=self.db_password,
+                database=self.db_name
+            )
+            if self.db_connection:
+                self.cursor = self.db_connection.cursor()
+                logging.info("Connected to database successfully.")
+            else:
+                logging.error("Failed to connect to the database.")
+                raise ConnectionError("Database connection failed.")
+        except mysql.connector.Error as err:
+            handle_database_exception(err)
+            raise
 
     def parse_gngga(self, sentence):
         # Parse the GNGGA sentence for GPS data
