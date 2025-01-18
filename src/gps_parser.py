@@ -160,9 +160,10 @@ class GPSParser:
         if self.serial_port and self.serial_port.is_open:
             self.serial_port.close()
 
-if __name__ == "__main__":
+def main():
     # Initialize and run the GPS parser
     gps_parser = GPSParser()
+
     try:
         gps_parser.connect_to_serial()
         gps_parser.connect_to_database()
@@ -173,3 +174,8 @@ if __name__ == "__main__":
         gps_thread.join()
     except Exception as e:
         logging.critical(f"Fatal error: {e}")
+        raise
+        
+
+if __name__ == "__main__":
+    main()
