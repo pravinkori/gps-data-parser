@@ -8,14 +8,12 @@ import mysql.connector
 import serial.tools.list_ports
 
 from utils.helpers import (
-    knots_to_kmh,
     setup_logging, 
     execute_query,
     is_valid_latitude,
     is_valid_longitude,
     parse_gnvtg_sentence, 
     parse_gngga_sentence, 
-    decimal_degrees_to_dms,
     handle_serial_exception, 
     handle_database_exception,
     create_database_connection,
@@ -66,7 +64,8 @@ class GPSParser:
             self.serial_port = serial.Serial(port=port, baudrate=self.baudrate, timeout=self.timeout)
             logging.info(f"Connected to serial port: {port}")
         except Exception as e:
-            logging.error(f"Serial connection error: {e}")
+            # logging.error(f"Serial connection error: {e}")
+            handle_serial_exception(e)
             raise
 
     def connect_to_database(self):
