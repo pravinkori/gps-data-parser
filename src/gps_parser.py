@@ -120,13 +120,13 @@ class GPSParser:
 
                 # Parse GNGGA sentences for location and fix data
                 if current_line.startswith('$GNGGA'):
-                    parsed_gga_data = self.parse_gngga(current_line)
+                    parsed_gga_data = parse_gngga_sentence(current_line)
                     if parsed_gga_data:
                         combined_data.update(parsed_gga_data)
 
                 # Parse GNVTG sentences for speed and direction data
                 elif current_line.startswith('$GNVTG'):
-                    parsed_vtg_data = self.parse_gnvtg(current_line)
+                    parsed_vtg_data = parse_gnvtg_sentence(current_line)
                     if parsed_vtg_data:
                         combined_data.update(parsed_vtg_data)
 
