@@ -1,7 +1,5 @@
-import pytz
 import serial
 import logging
-import datetime
 import threading
 import configparser
 import mysql.connector
@@ -20,9 +18,9 @@ from utils.helpers import (
     )
 
 class GPSParser:
-    def __init__(self, config_file='config.ini'):
+    def __init__(self, config_file='config/config.ini'):
         # Setup logging for debugging and operational tracking
-        setup_logging('gps_parser.log')
+        setup_logging('logs/gps_parser.log')
 
         # Initialize the config parser and read the configuration file
         self.config = configparser.ConfigParser()
