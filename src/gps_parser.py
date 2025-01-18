@@ -150,6 +150,15 @@ class GPSParser:
                     combined_data = {}
         except Exception as e:
             logging.error(f"GPS data handling error: {e}")
+    
+    # Cleanup method to properly close connection
+    def __def__(self):
+        if self.cursor:
+            self.cursor.close()
+        if self.db_connection:
+            self.db_connection.close()
+        if self.serial_port and self.serial_port.is_open:
+            self.serial_port.close()
 
 if __name__ == "__main__":
     # Initialize and run the GPS parser
