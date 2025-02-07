@@ -3,6 +3,15 @@ import logging
 import datetime
 import mysql.connector
 
+# Custom Exception
+class GPSConnectionError(Exception):
+    """Exception raised for errors in establishing GPS connection."""
+    pass
+
+class DatabaseConnectionError(Exception):
+    """Exception raised for errors in establishing database connection."""
+    pass
+
 def is_valid_latitude(lat):
     """Validate if a given value is a valid latitude."""
     return -90 <= lat <= 90
