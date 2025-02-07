@@ -4,18 +4,19 @@ import threading
 import configparser
 import mysql.connector
 import serial.tools.list_ports
+from typing import Optional, Dict, Any
 
-from utils.helpers import (
+from src.utils import (
     setup_logging, 
-    execute_query,
-    is_valid_latitude,
-    is_valid_longitude,
+    execute_query, 
+    is_valid_latitude, 
+    is_valid_longitude, 
     parse_gnvtg_sentence, 
     parse_gngga_sentence, 
     handle_serial_exception, 
-    handle_database_exception,
-    create_database_connection,
-    )
+    handle_database_exception, 
+    create_database_connection
+)
 
 class GPSParser:
     def __init__(self, config_file='config/config.ini'):
@@ -62,13 +63,12 @@ class GPSParser:
             self.serial_port = serial.Serial(port=port, baudrate=self.baudrate, timeout=self.timeout)
             logging.info(f"Connected to serial port: {port}")
         except Exception as e:
-            # logging.error(f"Serial connection error: {e}")
             handle_serial_exception(e)
             raise
 
     def connect_to_database(self):
         try:
-            # Establish a connection to the MySQL database
+            # Establish a connection to the MySQL database using helper function
             self.db_connection = create_database_connection(
                 host=self.db_host,
                 user=self.db_user,
@@ -96,10 +96,9 @@ class GPSParser:
                 INSERT INTO tbl_gps_data (latd, lond, gps_date, gps_time, speed, bearing, interval_type) 
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-        
         params = (latitude, longitude, gps_date, gps_time, speed, bearing, interval_type)
         
-        # Insert GPS data into the database
+        # Insert GPS data into the database using helper function
         try:
             execute_query(self.cursor, query, params)
             self.db_connection.commit()
@@ -148,14 +147,18 @@ class GPSParser:
         except Exception as e:
             logging.error(f"GPS data handling error: {e}")
     
-    # Cleanup method to properly close connection
-    def __def__(self):
-        if self.cursor:
-            self.cursor.close()
-        if self.db_connection:
-            self.db_connection.close()
-        if self.serial_port and self.serial_port.is_open:
-            self.serial_port.close()
+    def close(self):
+        # Cleanup method to properly close connections and release resources
+        try:
+            if self.cursor:
+                self.cursor.close()
+            if self.db_connection:
+                self.db_connection.close()
+            if self.serial_port and self.serial_port.is_open:
+                self.serial_port.close()
+            logging.info("Cleaned up resources successfully.")
+        except Exception as e:
+            logging.error(f"Error during cleanup: {e}")
 
 def main():
     # Initialize and run the GPS parser
@@ -172,7 +175,9 @@ def main():
     except Exception as e:
         logging.critical(f"Fatal error: {e}")
         raise
-        
-
+    finally:
+        # Ensure cleanup of resources
+        gps_parser.close()
+       
 if __name__ == "__main__":
     main()
