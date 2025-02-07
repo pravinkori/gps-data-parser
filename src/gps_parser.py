@@ -4,7 +4,7 @@ import threading
 import configparser
 import mysql.connector
 import serial.tools.list_ports
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 from src.utils import (
     setup_logging, 
@@ -15,10 +15,16 @@ from src.utils import (
     parse_gngga_sentence, 
     handle_serial_exception, 
     handle_database_exception, 
-    create_database_connection
+    create_database_connection,
+    GPSConnectionError,
+    DatabaseConnectionError
 )
 
 class GPSParser:
+    """
+    GPSParser connects to a GPS device via serial port, parses incoming NMEA sentences,
+    and stores processed data into a MySQL database.
+    """
     def __init__(self, config_file='config/config.ini'):
         # Setup logging for debugging and operational tracking
         setup_logging('logs/gps_parser.log')
@@ -47,7 +53,7 @@ class GPSParser:
         self.serial_port = None
 
     def auto_select_serial_port(self):
-        # Auto-detect the correct serial port based on known device descriptions
+        """Auto-detect the correct serial port based on known device descriptions"""
         ports = serial.tools.list_ports.comports()
         for port in ports:
             if "CP2102N USB to UART Bridge Controller" in port.description or \
@@ -57,7 +63,7 @@ class GPSParser:
         raise IOError("GPS serial port not found.")
 
     def connect_to_serial(self):
-        # Establish a connection to the serial port
+        """Establish a connection to the serial port"""
         try:
             port = self.auto_select_serial_port()
             self.serial_port = serial.Serial(port=port, baudrate=self.baudrate, timeout=self.timeout)
@@ -67,6 +73,7 @@ class GPSParser:
             raise
 
     def connect_to_database(self):
+        """Establish connection to the MySQL database."""
         try:
             # Establish a connection to the MySQL database using helper function
             self.db_connection = create_database_connection(
@@ -86,6 +93,7 @@ class GPSParser:
             raise
 
     def insert_into_database(self, latitude, longitude, gps_date, gps_time, speed, bearing, interval_type):
+        """Insert parsed GPS data into the database"""
         # Validate latitude and longitude values
         if not (is_valid_latitude(latitude) and is_valid_longitude(longitude)):
             logging.error(f"Invalid coordinates: lat={latitude}, lon={longitude}")
@@ -107,8 +115,9 @@ class GPSParser:
             handle_database_exception(db_err)
 
     def gps_data_handler(self):
+        """Continuously read from the serial port, parse data, and store it in the database."""
         # Handle incoming GPS data from the serial port
-        combined_data = {}
+        combined_data: Dict[str, Any] = {}
         try:
             while True:
                 # Read a line from the serial port
@@ -148,7 +157,7 @@ class GPSParser:
             logging.error(f"GPS data handling error: {e}")
     
     def close(self):
-        # Cleanup method to properly close connections and release resources
+        """Cleanup method to properly close connections and release resources"""
         try:
             if self.cursor:
                 self.cursor.close()
@@ -161,7 +170,7 @@ class GPSParser:
             logging.error(f"Error during cleanup: {e}")
 
 def main():
-    # Initialize and run the GPS parser
+    """Initialize and run the GPS parser"""
     gps_parser = GPSParser()
 
     try:
