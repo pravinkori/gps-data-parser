@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 # Import all utility functions
 from .helpers import (
+    # Custom exception
+    GPSConnectionError,
+    DatabaseConnectionError,
+
     # Validation functions
     is_valid_latitude,
     is_valid_longitude,
@@ -132,6 +136,9 @@ def format_nmea_data(
     return formatted
 
 __all__ = [
+    GPSConnectionError,
+    DatabaseConnectionError,
+    
     # Main utility functions
     'is_valid_latitude',
     'is_valid_longitude',
