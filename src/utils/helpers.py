@@ -12,6 +12,7 @@ class DatabaseConnectionError(Exception):
     """Exception raised for errors in establishing database connection."""
     pass
 
+# Validation functions
 def is_valid_latitude(lat):
     """Validate if a given value is a valid latitude."""
     return -90 <= lat <= 90
@@ -20,6 +21,7 @@ def is_valid_longitude(lon):
     """Validate if a given value is a valid longitude."""
     return -180 <= lon <= 180
 
+# Conversion functions
 def knots_to_kmh(knots):
     """Convert speed from knots to kilometers per hour."""
     return knots * 1.852
@@ -40,6 +42,7 @@ def format_gps_datetime(gps_date, gps_time):
     """Format GPS date and time into ISO 8601."""
     return f"{gps_date}T{gps_time}"
 
+# Database functions
 def create_database_connection(host, user, password, database):
     """Establish and return a database connection."""
     try:
@@ -73,15 +76,6 @@ def setup_logging(log_file='app.log'):
 def split_nmea_sentence(sentence):
     """Split NMEA sentence into parts, ignoring checksum."""
     return sentence.split(',')[:-1]
-
-# Error Handlers
-def handle_serial_exception(e):
-    """Handle serial connection exceptions."""
-    print(f"Serial error: {e}")
-
-def handle_database_exception(e):
-    """Handle database-related exceptions."""
-    logging.error(f"Databse operation error: {e}")
 
 # Parse the GNGGA sentence for GPS data
 def parse_gngga_sentence(sentence):
@@ -176,3 +170,12 @@ def parse_gnvtg_sentence(sentence):
     except (IndexError, ValueError) as e:
         logging.error(f"Error parsing GNVTG sentence: {e}")
         return None
+
+# Error Handlers
+def handle_serial_exception(e):
+    """Handle serial connection exceptions."""
+    print(f"Serial error: {e}")
+
+def handle_database_exception(e):
+    """Handle database-related exceptions."""
+    logging.error(f"Databse operation error: {e}")
