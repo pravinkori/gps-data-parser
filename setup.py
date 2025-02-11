@@ -1,15 +1,22 @@
+import os
 from setuptools import setup, find_packages
+
+# Read the contents of README.md for the long description
+here = os.path.abspath(os.path.dirname(__file__))
+with open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
 
 setup(
     name='gps-data-parser',  # Name of package
     version='0.1.0',  # Initial version
     description='A GPS data parser for extracting, storing, and analyzing location data from GPS devices.',
-    long_description=open('README.md').read(),
+    long_description=long_description,
     long_description_content_type='text/markdown',
-    author='Your Name',
-    author_email='your_email@example.com',
+    author='Pravin Kori',
+    author_email='pravinkori@protonmail.ch',
     url='https://github.com/pravinkori/gps-data-parser',  # GitHub URL
     license='MIT',  # License type
+    license_files=('LICENSE',),
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
@@ -19,6 +26,7 @@ setup(
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Operating System :: OS Independent',
     ],
     keywords='GPS parser data analysis',
     packages=find_packages(where='src'),  # Automatically find packages in the 'src' directory
@@ -34,7 +42,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'gps-parser=gps_parser:main',  # Command-line entry point
+            'gps-parser=src.gps_parser:main',  # Command-line entry point
         ],
     },
     include_package_data=True,  # Include non-code files from MANIFEST.in
