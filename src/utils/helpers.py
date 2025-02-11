@@ -1,9 +1,14 @@
+import os
 import pytz
 import logging
 import datetime
 import mysql.connector
+import logging.handlers
+from decimal import Decimal
+from dataclasses import dataclass
+from typing import Dict, Any, Optional, Tuple, Union
 
-# Custom Exception
+# Custom Exceptions
 class GPSConnectionError(Exception):
     """Exception raised for errors in establishing GPS connection."""
     pass
@@ -12,170 +17,232 @@ class DatabaseConnectionError(Exception):
     """Exception raised for errors in establishing database connection."""
     pass
 
+class NMEAParseError(Exception):
+    """Exception raised for errors in parsing NMEA sentences."""
+    pass
+
+# Data Classes for better type safety and cleaner code
+@dataclass
+class GPSCoordinate:
+    """Represents a GPS coordinate with validation."""
+    latitude: float
+    longitude: float
+
+    def __post_init__(self):
+        if not is_valid_latitude(self.latitude):
+            raise ValueError(f"Invalid latitude: {self.latitude}")
+        if not is_valid_longitude(self.longitude):
+            raise ValueError(f"Invalid longitude: {self.longitude}")
+
+@dataclass
+class GPSData:
+    """Represents parsed GPS data."""
+    coordinate: GPSCoordinate
+    date: datetime.date
+    time: datetime.time
+    num_satellites: int
+    high_accuracy: bool
+    fix_quality: int
+    speed_kmh: Optional[float] = None
+    bearing: Optional[float] = None
+
 # Validation functions
-def is_valid_latitude(lat):
+def is_valid_latitude(lat: float) -> bool:
     """Validate if a given value is a valid latitude."""
-    return -90 <= lat <= 90
+    return isinstance(lat, (int, float, Decimal)) and -90 <= float(lat) <= 90
 
-def is_valid_longitude(lon):
+def is_valid_longitude(lon: float) -> bool:
     """Validate if a given value is a valid longitude."""
-    return -180 <= lon <= 180
+    return isinstance(lon, (int, float, Decimal)) and -180 <= float(lon) <= 180
 
-# Conversion functions
-def knots_to_kmh(knots):
+# Conversion functions with better type hints
+def knots_to_kmh(knots: float) -> float:
     """Convert speed from knots to kilometers per hour."""
-    return knots * 1.852
+    return float(knots) * 1.852
 
-def decimal_degrees_to_dms(degrees):
-    """Convert decimal degrees to degrees, minutes, and seconds (DMS)."""
+def decimal_degrees_to_dms(degrees: float) -> Tuple[int, int, float]:
+    """
+    Convert decimal degrees to degrees, minutes, and seconds (DMS).
+    
+    Returns:
+        Tuple of (degrees, minutes, seconds)
+    """
     d = int(degrees)
     m = int((degrees - d) * 60)
-    s = (degrees - d - m / 60) * 3600
+    s = round((degrees - d - m / 60) * 3600, 6)  # Round to 6 decimal places
     return d, m, s
 
-def utc_to_timezone(utc_time, timezone='Asia/Dubai'):
-    """Convert UTC datetime to a specified timezone."""
-    local_tz = pytz.timezone(timezone)
-    return utc_time.astimezone(local_tz)
+def utc_to_timezone(utc_time: datetime.datetime, timezone: str = 'Asia/Kolkata') -> datetime.datetime:
+    """
+    Convert UTC datetime to a specified timezone.
+    
+    Args:
+        utc_time: UTC datetime object
+        timezone: Target timezone string
+    
+    Returns:
+        Localized datetime object
+    """
+    if not utc_time.tzinfo:
+        utc_time = pytz.utc.localize(utc_time)
+    return utc_time.astimezone(pytz.timezone(timezone))
 
-def format_gps_datetime(gps_date, gps_time):
+def format_gps_datetime(gps_date: Union[datetime.date, str], 
+                       gps_time: Union[datetime.time, str]) -> str:
     """Format GPS date and time into ISO 8601."""
-    return f"{gps_date}T{gps_time}"
+    if isinstance(gps_date, str) and isinstance(gps_time, str):
+        return f"{gps_date}T{gps_time}"
+    return f"{gps_date.isoformat()}T{gps_time.isoformat()}"
 
-# Database functions
-def create_database_connection(host, user, password, database):
-    """Establish and return a database connection."""
-    try:
-        return mysql.connector.connect(
+# Database functions with connection pooling
+class DatabaseManager:
+    """Manages database connections and operations."""
+    
+    def __init__(self, host: str, user: str, password: str, database: str):
+        self.pool = mysql.connector.pooling.MySQLConnectionPool(
+            pool_name="gps_pool",
+            pool_size=5,
             host=host,
             user=user,
             password=password,
             database=database
         )
-    except mysql.connector.Error as e:
-        print(f"Database connection error: {e}")
-        return None
+    
+    def execute_query(self, query: str, params: tuple = None) -> None:
+        """Execute a database query with proper connection handling."""
+        with self.pool.get_connection() as connection:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(query, params)
+                connection.commit()
+            except mysql.connector.Error as err:
+                connection.rollback()
+                logging.error(f"Database error: {err}")
+                raise DatabaseConnectionError(f"Query execution failed: {err}")
+            finally:
+                connection.close()
 
-def execute_query(cursor, query, params):
-    """Execute a database query and handle errors"""
-    try:
-        cursor.execute(query, params)
-    except mysql.connector.Error as err:
-        logging.error(f"Error executing query: {err}")
-
-# Logging Utilities
-def setup_logging(log_file='app.log'):
-    """Configure logging for the application."""
-    logging.basicConfig(
-        filename=log_file,
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
-
-# NMEA Parsing Helpers
-def split_nmea_sentence(sentence):
-    """Split NMEA sentence into parts, ignoring checksum."""
-    return sentence.split(',')[:-1]
-
-# Parse the GNGGA sentence for GPS data
-def parse_gngga_sentence(sentence):
-    try:
-        parts = sentence.split(',')
-
-        # Check if the sentence is a valid GNGGA message
-        if parts[0] != "$GNGGA":
+# Improved NMEA parsing with better error handling
+class NMEAParser:
+    """Handles parsing of NMEA sentences."""
+    
+    @staticmethod
+    def parse_gngga_sentence(sentence: str) -> Optional[Dict[str, Any]]:
+        """Parse GNGGA sentence with improved error handling and validation."""
+        try:
+            parts = sentence.strip().split(',')
+            
+            if not sentence.startswith("$GNGGA") or len(parts) < 15:
+                raise NMEAParseError("Invalid GNGGA sentence format")
+            
+            fix_quality = int(parts[6]) if parts[6] else 0
+            if fix_quality in [0, 6, 7, 8]:
+                logging.warning(f"Invalid GPS fix quality: {fix_quality}")
+                return None
+            
+            # Parse time
+            utc_time = parts[1]
+            if len(utc_time) < 6:
+                raise NMEAParseError("Invalid time format")
+                
+            hours = int(utc_time[0:2])
+            minutes = int(utc_time[2:4])
+            seconds = float(utc_time[4:])
+            
+            gps_time = datetime.time(
+                hours, 
+                minutes, 
+                int(seconds), 
+                int((seconds - int(seconds)) * 1e6)
+            )
+            
+            # Parse coordinates with better validation
+            try:
+                latitude = NMEAParser._parse_latitude(parts[2], parts[3])
+                longitude = NMEAParser._parse_longitude(parts[4], parts[5])
+            except ValueError as e:
+                raise NMEAParseError(f"Coordinate parsing error: {e}")
+            
+            # Create GPS data object
+            gps_data = GPSData(
+                coordinate=GPSCoordinate(latitude, longitude),
+                date=datetime.datetime.utcnow().date(),
+                time=gps_time,
+                num_satellites=int(parts[7]) if parts[7] else 0,
+                high_accuracy=fix_quality in [4, 5],
+                fix_quality=fix_quality
+            )
+            
+            return dataclass_to_dict(gps_data)
+            
+        except (IndexError, ValueError, NMEAParseError) as e:
+            logging.error(f"Error parsing GNGGA sentence: {e}")
             return None
+    
+    @staticmethod
+    def _parse_latitude(raw_lat: str, direction: str) -> float:
+        """Parse latitude from NMEA format."""
+        if not raw_lat or not direction:
+            raise ValueError("Missing latitude data")
+            
+        degrees = int(raw_lat[:2])
+        minutes = float(raw_lat[2:])
+        latitude = degrees + minutes / 60
         
-        # Parse the GPS fix quality; ignore invalid or non-standard fixes
-        fix_quality = int(parts[6])
-        if fix_quality in [0, 6, 7, 8]:
-            logging.warning("Invalid or non-standard GPS fix.")
-            return None
+        return -latitude if direction == 'S' else latitude
+    
+    @staticmethod
+    def _parse_longitude(raw_lon: str, direction: str) -> float:
+        """Parse longitude from NMEA format."""
+        if not raw_lon or not direction:
+            raise ValueError("Missing longitude data")
+            
+        degrees = int(raw_lon[:3])
+        minutes = float(raw_lon[3:])
+        longitude = degrees + minutes / 60
+        
+        return -longitude if direction == 'W' else longitude
 
-        # Extract and parse UTC time from the sentence
-        utc_time = parts[1]
-        hours = int(utc_time[0:2])
-        minutes = int(utc_time[2:4])
-        seconds = float(utc_time[4:])
-        gps_time = datetime.time(hours, minutes, int(seconds), int((seconds - int(seconds)) * 1e6))
-
-        # Convert latitude from degrees and minutes to decimal degrees
-        raw_latitude = parts[2]
-        lat_degrees = int(raw_latitude[:2])
-        lat_minutes = float(raw_latitude[2:])
-        latitude = lat_degrees + lat_minutes / 60
-        if parts[3] == 'S':
-            latitude = -latitude
-
-        # Convert longitude from degrees and minutes to decimal degrees
-        raw_longitude = parts[4]
-        lon_degrees = int(raw_longitude[:3])
-        lon_minutes = float(raw_longitude[3:])
-        longitude = lon_degrees + lon_minutes / 60
-        if parts[5] == 'W':
-            longitude = -longitude
-
-        # Parse the number of satellites and timestamp
-        num_satellites = int(parts[7])
-        gps_date = datetime.datetime.utcnow().date()
-        gps_datetime_utc = datetime.datetime.combine(gps_date, gps_time)
-        gps_datetime_utc = pytz.utc.localize(gps_datetime_utc)
-
-        # Convert the UTC time to Dubai timezone
-        ist_timezone = pytz.timezone('Asia/Kolkata')
-        gps_datetime_ist = gps_datetime_utc.astimezone(ist_timezone)
-
-        # Extract date and time in Dubai timezone
-        gps_date_ist = gps_datetime_ist.date()
-        gps_time_ist = gps_datetime_ist.time()
-
-        # Determine if the fix is high-accuracy (RTK fix)
-        high_accuracy = fix_quality in [4, 5]
-
-        # Prepare the parsed GPS data
+# Helper function to convert dataclass to dict
+def dataclass_to_dict(obj: Any) -> Dict[str, Any]:
+    """Convert a dataclass instance to a dictionary."""
+    if hasattr(obj, '__dataclass_fields__'):
         return {
-            "latitude": latitude,
-            "longitude": longitude,
-            "date": gps_date_ist.isoformat(),
-            "time": gps_time_ist.isoformat(),
-            "num_satellites": num_satellites,
-            "high_accuracy": high_accuracy,
-            "fix_quality": fix_quality
+            field: dataclass_to_dict(getattr(obj, field))
+            if hasattr(getattr(obj, field), '__dataclass_fields__')
+            else getattr(obj, field)
+            for field in obj.__dataclass_fields__
         }
+    return obj
 
-    except (IndexError, ValueError) as e:
-        logging.error(f"Error parsing GNGGA sentence: {e}")
-        return None
+# Setup logging with rotation
+def setup_logging(
+    log_file: str = 'app.log',
+    max_bytes: int = 10485760,  # 10MB
+    backup_count: int = 5
+) -> None:
+    """Configure logging with rotation and proper formatting."""
+    if log_file:
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir)
 
-# Parse the GNVTG sentence for GPS data
-def parse_gnvtg_sentence(sentence):
-    # Parse the GNVTG sentence for velocity and direction data
-    try:
-        parts = sentence.split(',')
+    handler = logging.handlers.RotatingFileHandler(
+        log_file,
+        maxBytes=max_bytes,
+        backupCount=backup_count
+    )
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    handler.setFormatter(formatter)
 
-        # Check if the sentence is a valid GNVTF message
-        if parts[0] != "$GNVTG":
-            return None
+    root_logger = logging.getLogger()
 
-        # Extract bearing and speed in km/h
-        bearing = float(parts[1]) if parts[1] else None
-        speed_kmh = float(parts[7]) if parts[7] else None
-
-        # Prepare the parsed velocity and bearing data
-        return {
-            "bearing": bearing,
-            "speed_kmh": speed_kmh
-        }
-
-    except (IndexError, ValueError) as e:
-        logging.error(f"Error parsing GNVTG sentence: {e}")
-        return None
-
-# Error Handlers
-def handle_serial_exception(e):
-    """Handle serial connection exceptions."""
-    print(f"Serial error: {e}")
-
-def handle_database_exception(e):
-    """Handle database-related exceptions."""
-    logging.error(f"Databse operation error: {e}")
+    # Prevent adding duplicate handlers
+    if not root_logger.handlers:
+        root_logger.setLevel(logging.INFO)
+        root_logger.addHandler(handler)
+    else:
+        # Optionally replace existing handlers or update them
+        root_logger.handlers = [handler]
